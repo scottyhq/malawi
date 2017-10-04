@@ -150,10 +150,10 @@ def main():
     out =  'output=json > query.json'
     querystr = '\\&'.join([base, poly, plat, beam, proc, out])
     print(querystr)
-    #os.system('curl ' + querystr)
+    #os.system('curl ' + querystr) #does work from spyder
     
     # Some basic coverage analysis
-    gf = load_asf_json('/Users/scott/Dropbox/planet/query.json')
+    gf = load_asf_json('query.json')
     gf.relativeOrbit.unique()
     #gf.iloc[0] #everything available
     #gf.plot()

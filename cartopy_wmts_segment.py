@@ -43,7 +43,7 @@ from owslib.wmts import WebMapTileService
 import geopandas as gpd
 import pandas as pd
 from pandas.plotting import table
-
+import numpy as np
 import shapely.wkt
 import urllib
 import json
@@ -62,14 +62,59 @@ def add_wmts_gibs_basemap(ax, date='2016-02-05'):
     #https://wiki.earthdata.nasa.gov/display/GIBS/GIBS+Available+Imagery+Products#expand-ReferenceLayers9Layers
     #layer = 'MODIS_Terra_SurfaceReflectance_Bands143'
     #layer = 'MODIS_Terra_CorrectedReflectance_Bands367'
-    layer = 'ASTER_GDEM_Greyscale_Shaded_Relief' #better zoomed in
-    #layer = 'SRTM_Color_Index'
+    #layer = 'ASTER_GDEM_Greyscale_Shaded_Relief' #better zoomed in
+    layer = 'SRTM_Color_Index' 
+    #layer = 'BlueMarble_ShadedRelief' #static
+    #layer = 'BlueMarble_NextGeneration'
+    #layer = 'BlueMarble_ShadedRelief_Bathymetry'
+    #layer = 'Reference_Labels'
+    #layer = 'Reference_Features'
 
-    ax.add_wmts(wmts, layer, wmts_kwargs={'time': date})
+    ax.add_wmts(wmts, layer, wmts_kwargs={'time': date}) # alpha=0.5
     #NOTE: can access attributes:
     #wmts[layer].title
     return wmts
 
+
+def add_xyz_tile(ax, url, zoom=6):
+    """ Grab a map tile from the web """
+    from cartopy.io.img_tiles import GoogleTiles
+    # Not sure about how projections are handled...
+    #url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}.jpg'
+    #url = 'http://tile.stamen.com/watercolor/{z}/{x}/{y}.png'
+    #url = 'https://s3.amazonaws.com/elevation-tiles-prod/normal/{z}/{x}/{y}.png'
+    tiler = GoogleTiles(url=url)
+    ax.add_image(tiler, zoom)
+    
+
+
+def query_asf(snwe, sat='1A'):
+    '''
+    takes list of [south, north, west, east]
+    '''
+    miny, maxy, minx, maxx = snwe
+    roi = shapely.geometry.box(minx, miny, maxx, maxy)
+    #test.__geo_interface__ #geojson?
+    polygonWKT = roi.to_wkt()
+
+    polygon = urllib.parse.quote_plus(polygonWKT) #for URL
+    base = 'https://api.daac.asf.alaska.edu/services/search/param?'
+    #Note: 'intersects' gets entire global track! ALSO, better to use 'requests' librar?
+    poly = 'intersectsWith={}'.format(polygon)
+    plat = 'platform=Sentinel-{}'.format(sat) #1B
+    proc = 'processingLevel=SLC'
+    beam = 'beamMode=IW'
+    #relativeOrbit=$ORBIT
+    out =  'output=json > query{}.json'.format(sat)
+    #out =  'output=kml > query.kml'
+    querystr = '\\&'.join([base, poly, plat, beam, proc, out]) #escape backslash
+    
+    #poly= polygonWKT
+    #url = '\&'.join([base, poly, plat, beam, proc, out]) #
+    os.system('curl ' + querystr)
+    print(querystr)
+    
+    
 
 # query ASF catalog and get json back
 def load_asf_json(jsonfile):
@@ -86,6 +131,8 @@ def load_asf_json(jsonfile):
     #gf.to_file(outfile) #saves as shapefile
     return gf 
 
+
+
 def main():
     # Plot setup
     plot_CRS = ccrs.Mercator()
@@ -99,7 +146,20 @@ def main():
     ax.set_xlim((x0, x1))
     ax.set_ylim((y0, y1))
     
-    wmts = add_wmts_gibs_basemap(ax)
+    #wmts = add_wmts_gibs_basemap(ax)
+    
+    #url = 'http://tile.stamen.com/watercolor/{z}/{x}/{y}.png'
+    #url = 'http://tile.stamen.com/terrain/{z}/{x}/{y}.png'
+    #url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}.jpg'
+    #url = 'https://s3.amazonaws.com/elevation-tiles-prod/normal/{z}/{x}/{y}.png'
+    #add_xyz_tile(ax, url, zoom=7) #higher number higher resultion #can't pass alpha argument...
+    
+    #ax.stock_img()
+    
+    # New 0.15 background method...
+    os.environ["CARTOPY_USER_BACKGROUNDS"] = '/Users/scott/Data/cartopy_data'
+    #ax.background_img("GrayEarth")
+    ax.background_img("ne_shaded", "low")
     
     #ax.coastlines(resolution='50m', color='black')
     # http://scitools.org.uk/cartopy/docs/v0.15/matplotlib/feature_interface.html
@@ -123,38 +183,16 @@ def main():
     ax.plot(-33.668, -9.135, 'k^', transform=geodetic_CRS)
     
     # Add deformation footprint
-    
     # Add ROI gjson
     # Go directly from SNWE box: -11.75 -8.75 32.5 35.5
-    #minx, miny, maxx, maxy
-    roi = shapely.geometry.box(32.5, -11.75, 35.5, -8.75)
-    #test.__geo_interface__ #geojson?
-    polygonWKT = roi.to_wkt()
-    '''
-    df = gpd.read_file('/Users/scott/Dropbox/planet/map.geojson')
-    ax.add_geometries(df.geometry.values, ccrs.PlateCarree(), 
-                      facecolor='none', 
-                      edgecolor='k',
-                      linewidth=3,
-                      linestyle='--')
-    polygonWKT = df.geometry[0].to_wkt()
-    '''
-    polygon = urllib.parse.quote_plus(polygonWKT) #for URL
-    base = 'https://api.daac.asf.alaska.edu/services/search/param?'
-    #Note: 'intersects' gets entire global track! ALSO, better to use 'requests' librar?
-    poly = 'intersectsWith={}'.format(polygon)
-    plat = 'platform=Sentinel-{}'.format('1A') #1B
-    proc = 'processingLevel=SLC'
-    beam = 'beamMode=IW'
-    #relativeOrbit=$ORBIT
-    out =  'output=json > query.json'
-    querystr = '\\&'.join([base, poly, plat, beam, proc, out])
-    print(querystr)
-    #os.system('curl ' + querystr) #does work from spyder
+    snwe = [-11.75, -8.75, 32.5, 35.5]
+    #query_asf(snwe, '1A') #downloads query.json
+    #query_asf(snwe, '1B') #downloads query.json
     
     # Some basic coverage analysis
     gf = load_asf_json('query.json')
-    gf.relativeOrbit.unique()
+    orbits = gf.relativeOrbit.unique()
+    #gf.to_file('query.geojson', driver='GeoJSON') #automatically rendered on github!
     #gf.iloc[0] #everything available
     #gf.plot()
     gf.groupby('relativeOrbit').fileName.count()
@@ -181,22 +219,37 @@ def main():
     '''
     
     # To unclutter, show cascaded union for each track in different colors
-    colors = ['c','m','b','y']
-    for orbit,color in zip(gf.relativeOrbit.unique(),colors):
+    #colors = ['c','m','b','y']
+    colors = plt.cm.jet(np.linspace(0,1,orbits.size))
+    #colors = plt.get_cmap('jet', orbits.size) #not iterable
+    for orbit,color in zip(orbits, colors):
         df = gf.query('relativeOrbit == @orbit')
-        ax.add_geometries([df.geometry.cascaded_union], 
+        poly = df.geometry.cascaded_union
+        
+        if df.flightDirection.iloc[0] == 'ASCENDING':
+            linestyle = '--'
+            #xpos, ypos = poly.bounds[0], poly.bounds[3] #upper left
+            xpos,ypos = poly.centroid.x, poly.bounds[3] 
+        else:
+            linestyle = '-'
+            #xpos, ypos = poly.bounds[2], poly.bounds[1] #lower right
+            xpos,ypos = poly.centroid.x, poly.bounds[1] 
+        
+        
+        ax.add_geometries([poly], 
                           ccrs.PlateCarree(), 
                           facecolor='none', 
                           edgecolor=color,
                           linewidth=2,
-                          linestyle='-')
+                          linestyle=linestyle)
+        ax.text(xpos, ypos, orbit, color=color, fontsize=16, fontweight='bold', transform=geodetic_CRS)
     
     # Add some text labels
-    fs = 16
-    ax.text(-69.6, -20.6, 'A149', color='b', fontsize=fs, fontweight='bold', transform=geodetic_CRS)
-    ax.text(-67.0, -20.25, 'A76', color='y', fontsize=fs, fontweight='bold', transform=geodetic_CRS)
-    ax.text(-67.8, -24.9, 'D83', color='m', fontsize=fs, fontweight='bold', transform=geodetic_CRS)
-    ax.text(-69.6, -24.6, 'D156', color='c', fontsize=fs, fontweight='bold', transform=geodetic_CRS)
+    #fs = 16
+    #ax.text(-69.6, -20.6, 'A149', color='b', fontsize=fs, fontweight='bold', transform=geodetic_CRS)
+    #ax.text(-67.0, -20.25, 'A76', color='y', fontsize=fs, fontweight='bold', transform=geodetic_CRS)
+    #ax.text(-67.8, -24.9, 'D83', color='m', fontsize=fs, fontweight='bold', transform=geodetic_CRS)
+    #ax.text(-69.6, -24.6, 'D156', color='c', fontsize=fs, fontweight='bold', transform=geodetic_CRS)
     
     
     # Warning, mixing PlateCarree and Mercator here... might not work
@@ -211,10 +264,11 @@ def main():
     gl.yformatter = LATITUDE_FORMATTER
     
     #plt.show()
-    plt.title('Sentinel-1 Coverage at Uturuncu')
+    plt.title('Sentinel-1 Coverage SEGMENT Project')
     plt.savefig('map_coverage.pdf', bbox_inches='tight')
     
     # Second figure for timeline
+    '''
     df = pd.DataFrame(gf.relativeOrbit.astype('int'))
     #df['platform'] = gf.platform
     df['sceneDate'] = pd.to_datetime(gf.sceneDate)
@@ -228,6 +282,9 @@ def main():
     dfS.sort_index(inplace=True, ascending=False)
     dfS.index.name = 'Orbit'
     plot_timeline_table(df, dfS)
+    '''
+    
+    #plot_timeline_table_new()
 
 
 def plot_timeline(df):
@@ -263,7 +320,7 @@ def plot_timeline_table(df, dfS):
     plt.ylim(-1,6)
     plt.ylabel('Orbit Number')
     fig.autofmt_xdate()
-    plt.title('Sentinel-1A Coverage at Uturuncu')
+    plt.title('Sentinel-1 Coverage SEGMENT Project')
     plt.savefig('timeline_with_table.pdf', bbox_inches='tight')
     
     
@@ -278,24 +335,21 @@ def print_acquisitions(df, orbit=156):
 
 
 def get_inventory():
-    gf = load_asf_json('/Users/scott/Dropbox/planet/query1A.json')
+    gf = load_asf_json('query1A.json')
     dfA = pd.DataFrame(gf.relativeOrbit.astype('int'))
     dfA['platform'] = gf.platform
     dfA['sceneDate'] = pd.to_datetime(gf.sceneDate)
     dfA['dateStr'] = dfA.sceneDate.apply(lambda x: x.strftime('%Y-%m-%d'))
     dfA['code'] = dfA.relativeOrbit.astype('category').cat.codes
 
-    gf = load_asf_json('/Users/scott/Dropbox/planet/query1B.json')
+    gf = load_asf_json('query1B.json')
     dfB = pd.DataFrame(gf.relativeOrbit.astype('int'))
     dfB['platform'] = gf.platform
     dfB['sceneDate'] = pd.to_datetime(gf.sceneDate)
     dfB['dateStr'] = dfB.sceneDate.apply(lambda x: x.strftime('%Y-%m-%d'))
     dfB['code'] = dfB.relativeOrbit.astype('category').cat.codes
-    
-    df = pd.concat([dfA,dfB])
-    df.reset_index(inplace=True)
 
-    return df
+    return dfA, dfB
 
     
 def plot_timeline_table_new():
@@ -304,8 +358,9 @@ def plot_timeline_table_new():
     '''
     plt.rcParams['font.size'] = 16
     
-    df = get_inventory()
-    
+    dfA,dfB = get_inventory()
+    df = pd.concat([dfA,dfB])
+    df.reset_index(inplace=True)
     dfS = pd.DataFrame(index=df.relativeOrbit.unique())
     dfS['Start'] = df.groupby('relativeOrbit').dateStr.min()
     dfS['Stop'] =  df.groupby('relativeOrbit').dateStr.max()
@@ -314,25 +369,28 @@ def plot_timeline_table_new():
     dfS.sort_index(inplace=True, ascending=False)
     dfS.index.name = 'Orbit'
     
+    # Same colors as map
+    orbits = df.relativeOrbit.unique()
+    colors = plt.cm.jet(np.linspace(0,1, orbits.size))
     
     fig,ax = plt.subplots(figsize=(17,8))
-    plt.scatter(dfA.sceneDate.values, dfA.code.values, c=dfA.code.values, cmap='viridis', s=60, label='S1A')
-    plt.scatter(dfB.sceneDate.values, dfB.code.values, c=dfB.code.values, cmap='viridis', s=60, marker='d',label='S1B')
+    plt.scatter(dfA.sceneDate.values, dfA.code.values, c=dfA.code.values, cmap='jet', s=60, label='S1A')
+    plt.scatter(dfB.sceneDate.values, dfB.code.values, c=dfB.code.values, cmap='jet', s=60, marker='d',label='S1B')
     plt.yticks(df.code.unique(), df.relativeOrbit.unique())
     plt.axvline('2016-04-22', color='gray', linestyle='dashed', label='Sentinel-1B launch')
     
     # Add to plot! as a custom legend
     table(ax, dfS, loc='top', zorder=10, fontsize=12,
-          #colWidths=[0.2, 0.2, 0.2, 0.1],
-          bbox=[0.1, 0.7, 0.8, 0.275] )#[left, bottom, width, height])
+          cellLoc = 'center', rowLoc = 'center',
+          bbox=[0.1, 0.7, 0.6, 0.3] )#[left, bottom, width, height])
     
     ax.xaxis.set_minor_locator(MonthLocator())
     ax.xaxis.set_major_locator(YearLocator())
-    plt.legend(loc='lower right')
-    plt.ylim(-2,6)
+    plt.legend(loc='upper right')
+    plt.ylim(-1,orbits.size+3)
     plt.ylabel('Orbit Number')
     fig.autofmt_xdate()
-    plt.title('Sentinel-1 Coverage at Uturuncu')
+    plt.title('Sentinel-1 Coverage SEGMENT Project')
     plt.savefig('timeline_with_table.pdf', bbox_inches='tight')
 
 if __name__ == '__main__':

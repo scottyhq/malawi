@@ -1,5 +1,9 @@
+*.icloud
 figures/*
 outputs/*
+GRACE/*
+srtm_12_03
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

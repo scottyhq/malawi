@@ -1,0 +1,7 @@
+{
+"type": "FeatureCollection",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "granuleName": "S1A_IW_SLC__1SDV_20170902T161032_20170902T161102_018198_01E955_0208", "downloadUrl": "https:\/\/datapool.asf.alaska.edu\/SLC\/SA\/S1A_IW_SLC__1SDV_20170902T161032_20170902T161102_018198_01E955_0208.zip" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 31.9026, -7.56 ], [ 32.2997, -9.361 ], [ 34.55, -8.8519 ], [ 34.1416, -7.0577 ], [ 31.9026, -7.56 ] ] ] } }
+]
+}
